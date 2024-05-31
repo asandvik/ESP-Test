@@ -385,7 +385,7 @@ void app_main(void)
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
     /* Initialize Notify Task */
-    xTaskCreate(notify_task, "notify_task", 4096, NULL, 10, NULL);
+    //xTaskCreate(notify_task, "notify_task", 4096, NULL, 10, NULL);
 
     rc = gatt_svr_init();
     assert(rc == 0);

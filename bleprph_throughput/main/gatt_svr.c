@@ -22,30 +22,59 @@
     )))
 
 /* 0000xxxx-8c26-476f-89a7-a108033a69c6 */
-#define THRPT_UUID_DECLARE_ALT(uuid16)                            \
+#define MY_UUID_DECLARE(uuid16)                            \
     ((const ble_uuid_t *) (&(ble_uuid128_t) BLE_UUID128_INIT(   \
-    0xc6, 0x69, 0x3a, 0x03, 0x08, 0xa1, 0xa7, 0x89,             \
-    0x6f, 0x47, 0x26, 0x8c, uuid16, uuid16 >> 8, 0x00, 0x00     \
+    0x38, 0xf2, 0x5f, 0xe3, 0x9e, 0x3a, 0x49, 0xbd,             \
+    0x64, 0x4a, 0x8d, 0x89, uuid16, uuid16 >> 8, 0x00, 0x00     \
     )))
+
+/* Simpler UUID initialization */
+// static const ble_uuid128_t my_gatt_svr_svc_uuid =
+// BLE_UUID128_INIT(0x38, 0xf2, 0x5f, 0xe3, 0x9e, 0x3a, 0x49, 0xbd,
+//                  0x64, 0x4a, 0x8d, 0x89, 0x29, 0xb9, 0xd2, 0x60);
 
 #define  THRPT_SVC                           0x0001
 #define  THRPT_CHR_READ_WRITE                0x0006
 #define  THRPT_CHR_NOTIFY                    0x000a
 #define  THRPT_LONG_CHR_READ_WRITE           0x000b
 
+// New
+#define  CMD_SVC_ID 0x00A0
+#define  CMD_WRITE_ID 0x00A1
+#define  CMD_READ_ID 0x00A2
+
 #define READ_THROUGHPUT_PAYLOAD            500
 #define WRITE_THROUGHPUT_PAYLOAD           500
 
+// New
+#define BUFF_SIZE 500
+
 static const char *tag = "bleprph_throughput";
+static uint16_t num_cmd_writes = 0;
+static uint16_t num_cmd_reads = 0;
 
 static uint8_t gatt_svr_thrpt_static_long_val[READ_THROUGHPUT_PAYLOAD];
 static uint8_t gatt_svr_thrpt_static_short_val[WRITE_THROUGHPUT_PAYLOAD];
 uint16_t notify_handle;
 
+// New
+static char cmd_output_buffer[BUFF_SIZE];
+uint16_t cmd_notify_handle;
+
 static int
 gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
                               struct ble_gatt_access_ctxt *ctxt,
                               void *arg);
+
+static int
+cmd_svc_write(uint16_t conn_handle, uint16_t attr_handle,
+              struct ble_gatt_access_ctxt *ctxt,
+              void *arg);
+
+static int
+cmd_svc_read(uint16_t conn_handle, uint16_t attr_handle,
+              struct ble_gatt_access_ctxt *ctxt,
+              void *arg);                                                            
 
 static const struct ble_gatt_svc_def gatts_test_svcs[] = {
     {
@@ -58,7 +87,6 @@ static const struct ble_gatt_svc_def gatts_test_svcs[] = {
                 .access_cb = gatt_svr_read_write_long_test,
                 .flags = BLE_GATT_CHR_F_READ |
                 BLE_GATT_CHR_F_WRITE,
-
             }, {
                 .uuid = THRPT_UUID_DECLARE(THRPT_CHR_NOTIFY),
                 .access_cb = gatt_svr_read_write_long_test,
@@ -76,12 +104,32 @@ static const struct ble_gatt_svc_def gatts_test_svcs[] = {
     },
 
     {
+        /*** My new command service */
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = MY_UUID_DECLARE(CMD_SVC_ID),
+        .characteristics = (struct ble_gatt_chr_def[])
+        {   {
+                .uuid = MY_UUID_DECLARE(CMD_WRITE_ID),
+                .access_cb = cmd_svc_write,
+                .flags = BLE_GATT_CHR_F_WRITE,
+            }, {
+                .uuid = MY_UUID_DECLARE(CMD_READ_ID),
+                .access_cb = cmd_svc_read,
+                .val_handle = &cmd_notify_handle,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+            }, {
+                0, /* No more characteristics in this service. */
+            }
+        },
+    },
+
+    {
         0, /* No more services. */
     },
 };
 
 static uint16_t
-extract_uuid16_from_thrpt_uuid128(const ble_uuid_t *uuid)
+univ_uuid128_to_local_uuid16(const ble_uuid_t *uuid)
 {
     const uint8_t *u8ptr;
     uint16_t uuid16;
@@ -121,7 +169,7 @@ gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
     uint16_t uuid16;
     int rc;
 
-    uuid16 = extract_uuid16_from_thrpt_uuid128(ctxt->chr->uuid);
+    uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
     assert(uuid16 != 0);
 
     switch (uuid16) {
@@ -158,6 +206,60 @@ gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
         assert(0);
         return BLE_ATT_ERR_UNLIKELY;
     }
+}
+
+static int
+cmd_svc_write(uint16_t conn_handle, uint16_t attr_handle,
+              struct ble_gatt_access_ctxt *ctxt,
+              void *arg)
+{
+    uint16_t uuid16;
+    int status = 0;
+
+    uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
+    assert(uuid16 != 0);
+
+    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
+        assert(0);
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    num_cmd_writes += 1;
+
+    ble_gatts_chr_updated(cmd_notify_handle);
+
+    // status = gatt_svr_chr_write(conn_handle, attr_handle,
+    //                             ctxt->om, 0,
+    //                             sizeof cmd_input_buffer,
+    //                             &cmd_input_buffer, NULL);
+
+    return status;
+}
+
+static int
+cmd_svc_read(uint16_t conn_handle, uint16_t attr_handle,
+              struct ble_gatt_access_ctxt *ctxt,
+              void *arg)
+{
+    uint16_t uuid16;
+    int status;
+
+    uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
+    assert(uuid16 != 0);
+
+    if (ctxt->op != BLE_GATT_ACCESS_OP_READ_CHR) {
+        assert(0);
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    num_cmd_reads += 1;
+
+    snprintf(cmd_output_buffer, BUFF_SIZE-1,
+            "Num writes = %d\nNum reads = %d", num_cmd_writes, num_cmd_reads);
+
+    status = os_mbuf_append(ctxt->om, cmd_output_buffer, sizeof cmd_output_buffer);
+
+    return status == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
 void
