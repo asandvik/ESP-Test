@@ -9,6 +9,8 @@
 #include "host/ble_hs.h"
 #include "gattc.h"
 
+static const char *tag = "peer";
+
 static void *peer_svc_mem;
 static struct os_mempool peer_svc_pool;
 
@@ -526,8 +528,11 @@ peer_dsc_find_uuid(const struct peer *peer, const ble_uuid_t *svc_uuid,
     const struct peer_chr *chr;
     const struct peer_dsc *dsc;
 
+    char buf[BLE_UUID_STR_LEN];
+
     chr = peer_chr_find_uuid(peer, svc_uuid, chr_uuid);
     if (chr == NULL) {
+        ESP_LOGE(tag, "  CHR %s not found", ble_uuid_to_str(chr_uuid, buf));
         return NULL;
     }
 
@@ -537,6 +542,7 @@ peer_dsc_find_uuid(const struct peer *peer, const ble_uuid_t *svc_uuid,
         }
     }
 
+    ESP_LOGE(tag, "  DSC %s not found", ble_uuid_to_str(dsc_uuid, buf));
     return NULL;
 }
 
@@ -792,4 +798,70 @@ err:
     peer_free_mem();
     ESP_LOGE("ERROR", "Error while allocating mem");
     return rc;
+}
+
+void peer_print_properties(uint8_t props)
+{
+    uint8_t mask = 1;
+
+    if (props & mask << 0) {
+        printf(" BROADCAST");
+    }
+    if (props & mask << 1) {
+        printf(" READ");
+    }
+    if (props & mask << 2) {
+        printf(" WRITE_NO_RSP");
+    }
+    if (props & mask << 3) {
+        printf(" WRITE");
+    }
+    if (props & mask << 4) {
+        printf(" NOTIFY");
+    }
+    if (props & mask << 5) {
+        printf(" INDICATE");
+    }
+    if (props & mask << 6) {
+        printf(" AUTH_SIGN_WRITE");
+    }
+    if (props & mask << 7) {
+        printf(" EXTENDED");
+    }
+}
+
+void peer_print_attribute_table(const struct peer *peer)
+{
+    const struct peer_svc *svc;
+    const struct peer_chr *chr;
+    const struct peer_dsc *dsc;
+
+    char buf[BLE_UUID_STR_LEN];
+
+    printf("peer: %p\n", peer);
+    printf("  conn_handle: %d\n", peer->conn_handle);
+
+    SLIST_FOREACH(svc, &peer->svcs, next) {
+        printf("  svc:\n");
+        printf("    uuid: %s\n", ble_uuid_to_str((const ble_uuid_t*)&(svc->svc.uuid), buf));
+        printf("    start_handle: %d\n", svc->svc.start_handle);
+        printf("    end_handle: %d\n", svc->svc.end_handle);
+        
+        SLIST_FOREACH(chr, &svc->chrs, next) {
+            printf("    chr:\n");
+            printf("      uuid: %s\n", ble_uuid_to_str((const ble_uuid_t*)&(chr->chr.uuid), buf));
+            printf("      def_handle: %d\n", chr->chr.def_handle);
+            printf("      val_handle: %d\n", chr->chr.val_handle);
+            printf("      properties: 0x%x", chr->chr.properties);
+            peer_print_properties(chr->chr.properties);
+            printf("\n");
+            
+            SLIST_FOREACH(dsc, &chr->dscs, next) {
+                printf("      dsc:\n");
+                printf("        uuid: %s\n", ble_uuid_to_str((const ble_uuid_t*)&(dsc->dsc.uuid), buf));
+                printf("        handle: %d\n", dsc->dsc.handle);
+            }
+        }
+    }
+
 }

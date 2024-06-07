@@ -20,12 +20,12 @@ struct ble_hs_cfg;
 union ble_store_value;
 union ble_store_key;
 
-#define BLECENT_SVC_ALERT_UUID              0x1811
-#define BLECENT_CHR_SUP_NEW_ALERT_CAT_UUID  0x2A47
-#define BLECENT_CHR_NEW_ALERT               0x2A46
-#define BLECENT_CHR_SUP_UNR_ALERT_CAT_UUID  0x2A48
-#define BLECENT_CHR_UNR_ALERT_STAT_UUID     0x2A45
-#define BLECENT_CHR_ALERT_NOT_CTRL_PT       0x2A44
+// #define BLECENT_SVC_ALERT_UUID              0x1811
+// #define BLECENT_CHR_SUP_NEW_ALERT_CAT_UUID  0x2A47
+// #define BLECENT_CHR_NEW_ALERT               0x2A46
+// #define BLECENT_CHR_SUP_UNR_ALERT_CAT_UUID  0x2A48
+// #define BLECENT_CHR_UNR_ALERT_STAT_UUID     0x2A45
+// #define BLECENT_CHR_ALERT_NOT_CTRL_PT       0x2A44
 
 /** Misc. */
 void print_bytes(const uint8_t *bytes, int len);
@@ -93,13 +93,15 @@ int peer_add(uint16_t conn_handle);
 int peer_init(int max_peers, int max_svcs, int max_chrs, int max_dscs);
 struct peer *
 peer_find(uint16_t conn_handle);
+void peer_print_attribute_table(const struct peer *peer);
+
 /* Console */
-int scli_init(void);
-void ble_register_cli(void);
-int scli_receive_key(int *key);
-int cli_receive_key(int *key);
-int scli_receive_yesno(bool *key);
-void scli_reset_queue(void);
+// int scli_init(void);
+// void ble_register_cli(void);
+// int scli_receive_key(int *key);
+// int cli_receive_key(int *key);
+// int scli_receive_yesno(bool *key);
+// void scli_reset_queue(void);
 
 
 #ifdef __cplusplus
