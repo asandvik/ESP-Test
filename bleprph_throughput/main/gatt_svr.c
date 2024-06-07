@@ -39,12 +39,11 @@
 #define  CMD_RESULT   0x00A2  // characteristic
 
 #define  CONN_TEST_SVC                  0x00B0 // service
-#define  CONN_TEST_CHR_READ_WRITE       0x00B1 // characteristic
-#define  CONN_TEST_CHR_NOTIFY           0x00B2 // characteristic
-#define  CONN_TEST_LONG_CHR_READ_WRITE  0x00B3 // characteristic
+#define  CONN_TEST_CHR_SHORT_READ_WRITE 0x00B1 // characteristic
+#define  CONN_TEST_CHR_LONG_READ_WRITE  0x00B2 // characteristic
 
-#define READ_THROUGHPUT_PAYLOAD            500
-#define WRITE_THROUGHPUT_PAYLOAD           500
+#define SHORT_THROUGHPUT_PAYLOAD            1
+#define LONG_THROUGHPUT_PAYLOAD             500
 
 // New
 #define BUFF_SIZE 500
@@ -53,8 +52,8 @@ static const char *tag = "bleprph_speedtest";
 // static uint16_t num_cmd_input_writes = 0;
 // static uint16_t num_cmd_input_reads = 0;
 
-static uint8_t gatt_svr_thrpt_static_long_val[READ_THROUGHPUT_PAYLOAD];
-static uint8_t gatt_svr_thrpt_static_short_val[WRITE_THROUGHPUT_PAYLOAD];
+static uint8_t gatt_svr_thrpt_static_long_val[LONG_THROUGHPUT_PAYLOAD];
+static uint8_t gatt_svr_thrpt_static_short_val[SHORT_THROUGHPUT_PAYLOAD];
 
 uint16_t cmd_input_notify_handle;
 uint16_t cmd_result_notify_handle;
@@ -68,7 +67,7 @@ static char conn_test_buffer[BUFF_SIZE];
 
 // Service Characteristic Callback Functions
 static int
-gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
+conn_test_read_write_cb(uint16_t conn_handle, uint16_t attr_handle,
                               struct ble_gatt_access_ctxt *ctxt,
                               void *arg);
 
@@ -117,18 +116,13 @@ static const struct ble_gatt_svc_def gatts_test_svcs[] = {
         .uuid = CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
         .characteristics = (struct ble_gatt_chr_def[])
         { {
-                .uuid = CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_READ_WRITE),
-                .access_cb = gatt_svr_read_write_long_test,
+                .uuid = CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_SHORT_READ_WRITE),
+                .access_cb = conn_test_read_write_cb,
                 .flags = BLE_GATT_CHR_F_READ |
                 BLE_GATT_CHR_F_WRITE,
             }, {
-                .uuid = CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_NOTIFY),
-                .access_cb = gatt_svr_read_write_long_test,
-                .val_handle = &conn_test_notify_handle,
-                .flags = BLE_GATT_CHR_F_NOTIFY,
-            }, {
-                .uuid = CONN_TEST_UUID_DECLARE(CONN_TEST_LONG_CHR_READ_WRITE),
-                .access_cb = gatt_svr_read_write_long_test,
+                .uuid = CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_LONG_READ_WRITE),
+                .access_cb = conn_test_read_write_cb,
                 .flags = BLE_GATT_CHR_F_WRITE |
                 BLE_GATT_CHR_F_READ,
             }, {
@@ -176,25 +170,26 @@ gatt_svr_chr_write(uint16_t conn_handle, uint16_t attr_handle,
 }
 
 static int
-gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
+conn_test_read_write_cb(uint16_t conn_handle, uint16_t attr_handle,
                               struct ble_gatt_access_ctxt *ctxt,
                               void *arg)
 {
     uint16_t uuid16;
     int rc;
 
-    ESP_LOGI(tag, "gatt_svr_read_write_long_test");
+    ESP_LOGI(tag, "conn_test_read_write_cb");
 
     uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
     assert(uuid16 != 0);
 
     switch (uuid16) {
-    case CONN_TEST_LONG_CHR_READ_WRITE:
+    case CONN_TEST_CHR_LONG_READ_WRITE:
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
             rc = gatt_svr_chr_write(conn_handle, attr_handle,
                                     ctxt->om, 0,
                                     sizeof gatt_svr_thrpt_static_long_val,
                                     &gatt_svr_thrpt_static_long_val, NULL);
+            ESP_LOGI(tag, "long write rc=%d", rc);
             return rc;
         } else if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
             gatt_svr_thrpt_static_long_val[0] = rand();
@@ -205,12 +200,13 @@ gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
         }
         return 0;
 
-    case CONN_TEST_CHR_READ_WRITE:
+    case CONN_TEST_CHR_SHORT_READ_WRITE:
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
             rc = gatt_svr_chr_write(conn_handle, attr_handle,
                                     ctxt->om, 0,
                                     sizeof gatt_svr_thrpt_static_short_val,
                                     gatt_svr_thrpt_static_short_val, NULL);
+            ESP_LOGI(tag, "short write rc=%d", rc);
             return rc;
         } else if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
             rc = os_mbuf_append(ctxt->om, gatt_svr_thrpt_static_short_val,
@@ -226,33 +222,33 @@ gatt_svr_read_write_long_test(uint16_t conn_handle, uint16_t attr_handle,
     }
 }
 
-static int
-conn_test_svc_read_write(uint16_t conn_handle, uint16_t attr_handle,
-                              struct ble_gatt_access_ctxt *ctxt,
-                              void *arg)
-{
-    uint16_t uuid16;
-    int rc;
+// static int
+// conn_test_svc_read_write(uint16_t conn_handle, uint16_t attr_handle,
+//                               struct ble_gatt_access_ctxt *ctxt,
+//                               void *arg)
+// {
+//     uint16_t uuid16;
+//     int rc;
 
-    ESP_LOGI(tag, "conn_test_svc_read_write");
+//     ESP_LOGI(tag, "conn_test_svc_read_write");
 
-    uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
-    assert(uuid16 == CONN_TEST_CHR_READ_WRITE); // Should only reach this cb via one characteristic
+//     uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
+//     assert(uuid16 == CONN_TEST_CHR_SHORT_READ_WRITE); // Should only reach this cb via one characteristic
 
-    if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-        rc = gatt_svr_chr_write(conn_handle, attr_handle,
-                                ctxt->om, 0,
-                                sizeof conn_test_buffer,
-                                &conn_test_buffer, NULL);
-        return rc;
-    } else if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) { 
-        gatt_svr_thrpt_static_long_val[0] = rand();
-        rc = os_mbuf_append(ctxt->om, &conn_test_buffer,
-                            sizeof conn_test_buffer);
-        return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
-    }
-    return 0;
-}
+//     if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+//         rc = gatt_svr_chr_write(conn_handle, attr_handle,
+//                                 ctxt->om, 0,
+//                                 sizeof conn_test_buffer,
+//                                 &conn_test_buffer, NULL);
+//         return rc;
+//     } else if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) { 
+//         gatt_svr_thrpt_static_long_val[0] = rand();
+//         rc = os_mbuf_append(ctxt->om, &conn_test_buffer,
+//                             sizeof conn_test_buffer);
+//         return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+//     }
+//     return 0;
+// }
 
 static int
 cmd_svc_input(uint16_t conn_handle, uint16_t attr_handle,

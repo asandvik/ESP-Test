@@ -43,21 +43,24 @@
 #define  CMD_RESULT 0x00A2  // characteristic
 
 #define  CONN_TEST_SVC                           0x00B0
-#define  CONN_TEST_CHR_READ_WRITE                0x00B1
-#define  CONN_TEST_CHR_NOTIFY                    0x00B2
-#define  CONN_TEST_LONG_CHR_READ_WRITE           0x00B3
+#define  CONN_TEST_CHR_SHORT_READ_WRITE          0x00B1
+#define  CONN_TEST_CHR_LONG_READ_WRITE           0x00B2
 
-#define  TEST_TIME_SEC  60
+#define  TEST_TIME_SEC  10
 
 /* connection test cases */
-#define READ_THROUGHPUT                    1
-#define WRITE_THROUGHPUT                   2
-#define NOTIFY_THROUGHPUT                  3
-#define READ_LATENCY                       4
-#define WRITE_LATENCY                      5
+#define SHORT_READ_THROUGHPUT              1
+#define LONG_READ_THROUGHPUT               2
+#define SHORT_WRITE_THROUGHPUT             3
+#define LONG_WRITE_THROUGHPUT              4
+#define SHORT_READ_LATENCY                 5
+#define LONG_READ_LATENCY                  6
+#define SHORT_WRITE_LATENCY                7
+#define LONG_WRITE_LATENCY                 8
 
-#define READ_THROUGHPUT_PAYLOAD            500
-#define WRITE_THROUGHPUT_PAYLOAD           500
+#define SHORT_THROUGHPUT_PAYLOAD           1
+#define LONG_THROUGHPUT_PAYLOAD            500
+
 #define LL_PACKET_TIME                     2120
 #define LL_PACKET_LENGTH                   251
 static const char *tag = "blecent_speedtest";
@@ -117,17 +120,17 @@ void ble_store_config_init(void);
 // }
 
 void send_res_buff() {
-    ble_gattc_write_no_rsp_flat(res_conn_handle, res_chr, res_buff, strlen(res_buff));
+    ble_gattc_write_no_rsp_flat(res_conn_handle, res_chr, res_buff, sizeof res_buff);
     memset(res_buff, 0, sizeof res_buff);
 } 
         
 
-static int blecent_write(uint16_t conn_handle, uint16_t val_handle,
+static int blecent_short_write(uint16_t conn_handle, uint16_t val_handle,
                          struct peer *peer, int test_time)
 {
     int64_t start_time, end_time, write_time = 0;
     int write_count = 0;
-    uint8_t value[WRITE_THROUGHPUT_PAYLOAD] = {0};
+    uint8_t value[SHORT_THROUGHPUT_PAYLOAD] = {0};
     int rc;
 
     value[0] = rand();
@@ -159,12 +162,64 @@ static int blecent_write(uint16_t conn_handle, uint16_t val_handle,
     printf("\n****************************************************************\n");
     ESP_LOGI(tag, "Application Write throughput = %d bps, write count = %d,"
              "failure count = %d",
-             ((write_count - failure_count) * 8 * WRITE_THROUGHPUT_PAYLOAD) / test_time,
+             ((write_count - failure_count) * 8 * SHORT_THROUGHPUT_PAYLOAD) / test_time,
              write_count, failure_count);
     printf("\n****************************************************************\n");
 
     sprintf(res_buff, "Write throughput = %d bps\nwrite count = %d\nfailure count =%d",
-            ((write_count - failure_count) * 8 * WRITE_THROUGHPUT_PAYLOAD) / test_time,
+            ((write_count - failure_count) * 8 * SHORT_THROUGHPUT_PAYLOAD) / test_time,
+             write_count, failure_count);
+    send_res_buff();
+
+    return 0;
+err:
+    /* Terminate the connection. */
+    return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+}
+
+static int blecent_long_write(uint16_t conn_handle, uint16_t val_handle,
+                         struct peer *peer, int test_time)
+{
+    int64_t start_time, end_time, write_time = 0;
+    int write_count = 0;
+    uint8_t value[LONG_THROUGHPUT_PAYLOAD] = {0};
+    int rc;
+
+    value[0] = rand();
+    failure_count = 0;
+    start_time = esp_timer_get_time();
+
+    while (write_time < test_time * 1000) {
+        /* Wait till the previous write is complete. For first time Semaphore
+         * is already available */
+	label:
+	    rc = ble_gattc_write_no_rsp_flat(conn_handle, val_handle, &value, sizeof value);
+
+	    if(rc == BLE_HS_ENOMEM) {
+		vTaskDelay(2); /* Wait for buffers to free up and try again */
+		goto label;
+	    }
+	    else if (rc != 0) {
+            	ESP_LOGE(tag, "Error: Failed to write characteristic; rc=%d",rc);
+            	goto err;
+        }
+
+        end_time = esp_timer_get_time();
+        write_time = (end_time - start_time) / 1000 ;
+        write_count += 1;
+    }
+
+    /* Each successful write is of WRITE_THROUGHPUT_PAYLOAD Bytes of
+     * application data. */
+    printf("\n****************************************************************\n");
+    ESP_LOGI(tag, "Application Write throughput = %d bps, write count = %d,"
+             "failure count = %d",
+             ((write_count - failure_count) * 8 * LONG_THROUGHPUT_PAYLOAD) / test_time,
+             write_count, failure_count);
+    printf("\n****************************************************************\n");
+
+    sprintf(res_buff, "Write throughput = %d bps\nwrite count = %d\nfailure count =%d",
+            ((write_count - failure_count) * 8 * LONG_THROUGHPUT_PAYLOAD) / test_time,
              write_count, failure_count);
     send_res_buff();
 
@@ -243,7 +298,7 @@ err:
 }
 
 static int
-blecent_read_latency_cb(uint16_t conn_handle,
+blecent_short_read_latency_cb(uint16_t conn_handle,
                     const struct ble_gatt_error *error,
                     struct ble_gatt_attr *attr,
                     void *arg)
@@ -252,13 +307,35 @@ blecent_read_latency_cb(uint16_t conn_handle,
     uint64_t start_time = *(uint64_t *)arg;
 
     if (error->status == 0) {
-        ESP_LOGI(tag, " READ LATENCY = %lluus", end_time-start_time);
+        ESP_LOGI(tag, " SHORT READ LATENCY = %lluus", end_time-start_time);
     } else {
         ESP_LOGE(tag, " Read (latency) failed, callback error code = %d", error->status);
         return error->status;
     }
 
-    sprintf(res_buff, " READ LATENCY = %lluus", end_time-start_time);
+    sprintf(res_buff, " SHORT READ LATENCY = %lluus", end_time-start_time);
+    send_res_buff();
+
+    return 0;
+}
+
+static int
+blecent_long_read_latency_cb(uint16_t conn_handle,
+                    const struct ble_gatt_error *error,
+                    struct ble_gatt_attr *attr,
+                    void *arg)
+{
+    uint64_t end_time = esp_timer_get_time();
+    uint64_t start_time = *(uint64_t *)arg;
+
+    if (error->status == 0) {
+        ESP_LOGI(tag, " LONG READ LATENCY = %lluus", end_time-start_time);
+    } else {
+        ESP_LOGE(tag, " Read (latency) failed, callback error code = %d", error->status);
+        return error->status;
+    }
+
+    sprintf(res_buff, " LONG READ LATENCY = %lluus", end_time-start_time);
     send_res_buff();
 
     return 0;
@@ -307,15 +384,14 @@ static void conn_test_loop(void *arg)
 
         switch (test_type) {
 
-            case READ_THROUGHPUT:
+            case SHORT_READ_THROUGHPUT:
                 /* Read the characteristic supporting long read support
-                    * `CONN_TEST_LONG_CHR_READ_WRITE` (0x00B3) */
+                    * `CONN_TEST_CHR_SHORT_READ_WRITE` (0x00B1) */
                 chr = peer_chr_find_uuid(peer,
                                         CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
-                                        CONN_TEST_UUID_DECLARE(CONN_TEST_LONG_CHR_READ_WRITE));
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_SHORT_READ_WRITE));
                 if (chr == NULL) {
-                    ESP_LOGE(tag, "Peer does not support "
-                                "LONG_READ (0x00B3) characteristic ");
+                    ESP_LOGE(tag, "Peer does not support B1 characteristic");
                     break;
                 }
 
@@ -325,58 +401,59 @@ static void conn_test_loop(void *arg)
                 }
                 break;
 
-            case WRITE_THROUGHPUT:
+            case LONG_READ_THROUGHPUT:
+                /* Read the characteristic supporting long read support
+                    * `CONN_TEST_CHR_LONG_READ_WRITE` (0x00B2) */
                 chr = peer_chr_find_uuid(peer,
                                         CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
-                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_READ_WRITE));
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_LONG_READ_WRITE));
                 if (chr == NULL) {
-                    ESP_LOGE(tag, "Error: Peer doesn't support the READ "
-                                "WRITE characteristic (0x00B1) ");
+                    ESP_LOGE(tag, "Peer does not support B2 characteristic");
                     break;
                 }
 
-                rc = blecent_write(peer->conn_handle, chr->chr.val_handle, (void *) peer, TEST_TIME_SEC);
+                rc = blecent_read(peer->conn_handle, chr->chr.val_handle, (void *) peer, TEST_TIME_SEC);
+                if (rc != 0) {
+                    ESP_LOGE(tag, "Error while reading from GATTS; rc = %d", rc);
+                }
+                break;
+
+            case SHORT_WRITE_THROUGHPUT:
+                chr = peer_chr_find_uuid(peer,
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_SHORT_READ_WRITE));
+                if (chr == NULL) {
+                    ESP_LOGE(tag, "Error: Peer doesn't support the B1");
+                    break;
+                }
+
+                rc = blecent_short_write(peer->conn_handle, chr->chr.val_handle, (void *) peer, TEST_TIME_SEC);
                 if (rc != 0) {
                     ESP_LOGE(tag, "Error while writing data; rc = %d", rc);
                 }
                 break;
 
-            // case NOTIFY_THROUGHPUT:
-            //     chr = peer_chr_find_uuid(peer,
-            //                                 THRPT_UUID_DECLARE(THRPT_SVC),
-            //                                 THRPT_UUID_DECLARE(THRPT_CHR_NOTIFY));
-            //     if (chr == NULL) {
-            //         ESP_LOGE(tag, "Error: Peer doesn't support the NOTIFY "
-            //                     "characteristic (0x000a) ");
-            //         break;
-            //     }
-            //     dsc = peer_dsc_find_uuid(peer,
-            //                                 THRPT_UUID_DECLARE(THRPT_SVC),
-            //                                 THRPT_UUID_DECLARE(THRPT_CHR_NOTIFY),
-            //                                 BLE_UUID16_DECLARE(BLE_GATT_DSC_CLT_CFG_UUID16));
-            //     if (dsc == NULL) {
-            //         ESP_LOGE(tag, "Error: Peer lacks a CCCD for the Notify "
-            //                     "Status characteristic\n");
-            //         break;
-            //     }
+            case LONG_WRITE_THROUGHPUT:
+                chr = peer_chr_find_uuid(peer,
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_SHORT_READ_WRITE));
+                if (chr == NULL) {
+                    ESP_LOGE(tag, "Error: Peer doesn't support the B1");
+                    break;
+                }
 
-            //     rc = blecent_notify(peer->conn_handle, dsc->dsc.handle,
-            //                         NULL, (void *) peer, test_data[1]);
-            //     if (rc != 0) {
-            //         ESP_LOGE(tag, "Subscribing to notification failed; rc = %d ", rc);
-            //     } else {
-            //         ESP_LOGI(tag, "Subscribed to notifications. Throughput number"
-            //                     " can be seen on peripheral terminal after %d seconds",
-            //                     test_data[1]);
-            //     }
-            //     break;
+                rc = blecent_long_write(peer->conn_handle, chr->chr.val_handle, (void *) peer, TEST_TIME_SEC);
+                if (rc != 0) {
+                    ESP_LOGE(tag, "Error while writing data; rc = %d", rc);
+                }
+                break;
 
-            case READ_LATENCY:
-                /* Read the characteristic supporting long read support
+            case SHORT_READ_LATENCY:
+                /* Read the characteristic supporting short read support
                     * `CONN_TEST_CHR_READ_WRITE` (0x00B1) */
                 chr = peer_chr_find_uuid(peer,
                                         CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
-                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_READ_WRITE));
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_SHORT_READ_WRITE));
                 if (chr == NULL) {
                     ESP_LOGE(tag, "Peer does not support CONN_TEST_CHR_READ_WRITE"
                                 " (0x00B1) characteristic");
@@ -385,7 +462,30 @@ static void conn_test_loop(void *arg)
 
                 start_time = esp_timer_get_time();
                 rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle,
-                                blecent_read_latency_cb, (void *) &start_time);
+                                blecent_short_read_latency_cb, (void *) &start_time);
+
+                if (rc != 0) {
+                    ESP_LOGE(tag, "Error while reading from GATTS; rc = %d", rc);
+                    return;
+                }
+
+                break;
+
+            case LONG_READ_LATENCY:
+                /* Read the characteristic supporting long read support
+                    * `CONN_TEST_CHR_READ_WRITE` (0x00B2) */
+                chr = peer_chr_find_uuid(peer,
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
+                                        CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_LONG_READ_WRITE));
+                if (chr == NULL) {
+                    ESP_LOGE(tag, "Peer does not support CONN_TEST_CHR_READ_WRITE"
+                                " (0x00B1) characteristic");
+                    break;
+                }
+
+                start_time = esp_timer_get_time();
+                rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle,
+                                blecent_long_read_latency_cb, (void *) &start_time);
 
                 if (rc != 0) {
                     ESP_LOGE(tag, "Error while reading from GATTS; rc = %d", rc);
