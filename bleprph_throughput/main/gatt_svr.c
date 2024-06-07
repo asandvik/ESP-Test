@@ -50,8 +50,8 @@
 #define BUFF_SIZE 500
 
 static const char *tag = "bleprph_speedtest";
-static uint16_t num_cmd_input_writes = 0;
-static uint16_t num_cmd_input_reads = 0;
+// static uint16_t num_cmd_input_writes = 0;
+// static uint16_t num_cmd_input_reads = 0;
 
 static uint8_t gatt_svr_thrpt_static_long_val[READ_THROUGHPUT_PAYLOAD];
 static uint8_t gatt_svr_thrpt_static_short_val[WRITE_THROUGHPUT_PAYLOAD];
@@ -103,7 +103,8 @@ static const struct ble_gatt_svc_def gatts_test_svcs[] = {
                 .uuid = CMD_UUID_DECLARE(CMD_RESULT),
                 .access_cb = cmd_svc_result,
                 .val_handle = &cmd_result_notify_handle,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, // contains measurements results, only server writes to it. may need to let other esp write to it
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE |
+                    BLE_GATT_CHR_F_NOTIFY, // contains measurements results, only server writes to it. may need to let other esp write to it
             }, {
                 0, /* No more characteristics in this service. */
             }
@@ -265,17 +266,17 @@ cmd_svc_input(uint16_t conn_handle, uint16_t attr_handle,
     assert(uuid16 != 0);
 
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-        num_cmd_input_reads += 1;
         rc = os_mbuf_append(ctxt->om, &cmd_input_buffer,
                     sizeof cmd_input_buffer);
+        ESP_LOGI(tag, "input read");
         rc = rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
     else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-        num_cmd_input_writes += 1;
         rc = gatt_svr_chr_write(conn_handle, attr_handle,
                         ctxt->om, 0,
                         sizeof cmd_input_buffer,
                         &cmd_input_buffer, NULL);
+        ESP_LOGI(tag, "input written");
         ble_gatts_chr_updated(cmd_input_notify_handle);
     } 
     else { 
@@ -283,7 +284,7 @@ cmd_svc_input(uint16_t conn_handle, uint16_t attr_handle,
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    ble_gatts_chr_updated(cmd_result_notify_handle); // tell phone about update
+    // ble_gatts_chr_updated(cmd_result_notify_handle); // tell phone about update
     return rc;
 }
 
@@ -293,22 +294,29 @@ cmd_svc_result(uint16_t conn_handle, uint16_t attr_handle,
               void *arg)
 {
     uint16_t uuid16;
-    int status;
+    int rc;
 
-    uuid16 = univ_uuid128_to_local_uuid16(ctxt->chr->uuid);
-    assert(uuid16 != 0);
-
-    if (ctxt->op != BLE_GATT_ACCESS_OP_READ_CHR) {
+    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+        rc = os_mbuf_append(ctxt->om, &cmd_result_buffer,
+                    sizeof cmd_result_buffer);
+        ESP_LOGI(tag, "result read");
+        rc = rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
+    else if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+        rc = gatt_svr_chr_write(conn_handle, attr_handle,
+                        ctxt->om, 0,
+                        sizeof cmd_result_buffer,
+                        &cmd_result_buffer, NULL);                 
+        ESP_LOGI(tag, "result written");
+        ble_gatts_chr_updated(cmd_result_notify_handle);
+    } 
+    else { 
         assert(0);
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    snprintf(cmd_result_buffer, BUFF_SIZE-1,
-            "Num cmd input writes = %d\nNum cmd input reads = %d", num_cmd_input_writes, num_cmd_input_reads);
-
-    status = os_mbuf_append(ctxt->om, cmd_result_buffer, sizeof cmd_result_buffer);
-
-    return status == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    // ble_gatts_chr_updated(cmd_result_notify_handle); // tell phone about update
+    return rc;
 }
 
 // Not really necessary. Just for logs
