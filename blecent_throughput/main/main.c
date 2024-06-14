@@ -55,8 +55,6 @@
 #define LONG_WRITE_THROUGHPUT              4
 #define SHORT_READ_LATENCY                 5
 #define LONG_READ_LATENCY                  6
-#define SHORT_WRITE_LATENCY                7
-#define LONG_WRITE_LATENCY                 8
 
 #define SHORT_THROUGHPUT_PAYLOAD           1
 #define LONG_THROUGHPUT_PAYLOAD            500
@@ -94,30 +92,8 @@ static struct ble_gap_upd_params conn_params = {
 };
 
 static int mtu_def = 512;
-/* test_data accepts test_name and test_time from CLI */
-// static int test_data[] = {1, 600};
+
 void ble_store_config_init(void);
-
-// static int
-// blecent_notify(uint16_t conn_handle, uint16_t val_handle,
-//                ble_gatt_attr_fn *cb, struct peer *peer, int test_time)
-// {
-//     uint8_t value[2] = {1, 0};/*To subscribe to notifications*/
-//     int rc;
-
-//     rc = ble_gattc_write_flat(conn_handle, val_handle,
-//                               value, sizeof value, NULL, &test_time);
-//     if (rc != 0) {
-//         ESP_LOGE(tag, "Error: Failed to subscribe to characteristic; "
-//                  "rc = %d", rc);
-//         goto err;
-//     }
-
-//     return 0;
-// err:
-//     /* Terminate the connection. */
-//     return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-// }
 
 void send_res_buff() {
     ble_gattc_write_no_rsp_flat(res_conn_handle, res_chr, res_buff, sizeof res_buff);
@@ -505,46 +481,6 @@ static void conn_test_loop(void *arg)
     return;
 }
 
-// /**
-//  * Performs 3 operations on the remote GATT server.
-//  * 1. Subscribes to a characteristic by writing 0x10 to it's CCCD.
-//  * 2. Writes to the characteristic and expect a notification from remote.
-//  * 3. Reads the characteristic and expect to get the recently written information.
-//  **/
-// static void
-// blecent_custom_gatt_operations(const struct peer* peer)
-// {
-//     const struct peer_dsc *dsc;
-//     int rc;
-//     uint8_t value[2];
-
-//     dsc = peer_dsc_find_uuid(peer,
-//                              CONN_TEST_SVC,
-//                              CONN_TEST_CHR_READ_WRITE,
-//                              BLE_UUID16_DECLARE(BLE_GATT_DSC_CLT_CFG_UUID16));
-//     if (dsc == NULL) {
-//         MODLOG_DFLT(ERROR, "Error: Peer lacks a CCCD for the subscribable characterstic\n");
-//         goto err;
-//     }
-
-//     /*** Write 0x00 and 0x01 (The subscription code) to the CCCD ***/
-//     value[0] = 1;
-//     value[1] = 0;
-//     rc = ble_gattc_write_flat(peer->conn_handle, dsc->dsc.handle,
-//                               value, sizeof(value), blecent_on_custom_subscribe, NULL);
-//     if (rc != 0) {
-//         MODLOG_DFLT(ERROR,
-//                     "Error: Failed to subscribe to the subscribable characteristic; "
-//                     "rc=%d\n", rc);
-//         goto err;
-//     }
-
-//     return;
-// err:
-//     /* Terminate the connection */
-//     ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-// }
-
 /**
  * Application callback.  Called when the attempt to subscribe to CMD_INPUT
  * notifications has completed... or when CMD_INPUT was written to?
@@ -567,119 +503,12 @@ blecent_on_subscribe(uint16_t conn_handle,
         ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
     }
 
-    /* Start main testing loop */
-    // conn_test_loop(peer);
-
     return 0;
 }
 
-// /**
-//  * Application callback.  Called when the write to the ANS Alert Notification
-//  * Control Point characteristic has completed.
-//  */
-// static int
-// blecent_on_write(uint16_t conn_handle,
-//                  const struct ble_gatt_error *error,
-//                  struct ble_gatt_attr *attr,
-//                  void *arg)
-// {
-//     MODLOG_DFLT(INFO,
-//                 "Write complete; status=%d conn_handle=%d attr_handle=%d\n",
-//                 error->status, conn_handle, attr->handle);
-
-//     /* Subscribe to notifications for the Unread Alert Status characteristic.
-//      * A central enables notifications by writing two bytes (1, 0) to the
-//      * characteristic's client-characteristic-configuration-descriptor (CCCD).
-//      */
-//     const struct peer_dsc *dsc;
-//     uint8_t value[2];
-//     int rc;
-//     const struct peer *peer = peer_find(conn_handle);
-
-//     dsc = peer_dsc_find_uuid(peer,
-//                              BLE_UUID16_DECLARE(BLECENT_SVC_ALERT_UUID),
-//                              BLE_UUID16_DECLARE(BLECENT_CHR_UNR_ALERT_STAT_UUID),
-//                              BLE_UUID16_DECLARE(BLE_GATT_DSC_CLT_CFG_UUID16));
-//     if (dsc == NULL) {
-//         MODLOG_DFLT(ERROR, "Error: Peer lacks a CCCD for the Unread Alert "
-//                     "Status characteristic\n");
-//         goto err;
-//     }
-
-//     value[0] = 1;
-//     value[1] = 0;
-//     rc = ble_gattc_write_flat(conn_handle, dsc->dsc.handle,
-//                               value, sizeof value, blecent_on_subscribe, NULL);
-//     if (rc != 0) {
-//         MODLOG_DFLT(ERROR, "Error: Failed to subscribe to characteristic; "
-//                     "rc=%d\n", rc);
-//         goto err;
-//     }
-
-//     return 0;
-// err:
-//     /* Terminate the connection. */
-//     return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-// }
-
-// /**
-//  * Application callback.  Called when the read of the ANS Supported New Alert
-//  * Category characteristic has completed.
-//  */
-// static int
-// blecent_on_read(uint16_t conn_handle,
-//                 const struct ble_gatt_error *error,
-//                 struct ble_gatt_attr *attr,
-//                 void *arg)
-// {
-//     MODLOG_DFLT(INFO, "Read complete; status=%d conn_handle=%d", error->status,
-//                 conn_handle);
-//     if (error->status == 0) {
-//         MODLOG_DFLT(INFO, " attr_handle=%d value=", attr->handle);
-//         print_mbuf(attr->om);
-//     }
-//     MODLOG_DFLT(INFO, "\n");
-
-//     /* Write two bytes (99, 100) to the alert-notification-control-point
-//      * characteristic.
-//      */
-//     const struct peer_chr *chr;
-//     uint8_t value[2];
-//     int rc;
-//     const struct peer *peer = peer_find(conn_handle);
-
-//     chr = peer_chr_find_uuid(peer,
-//         CONN_TEST_UUID_DECLARE(CONN_TEST_SVC),
-//         CONN_TEST_UUID_DECLARE(CONN_TEST_CHR_READ_WRITE)); // was CONN_TEST_LONG_CHR_READ_WRITE
-//     if (chr == NULL) {
-//         MODLOG_DFLT(ERROR, "Error: Peer doesn't support the speedtest "
-//                     "read-write characteristic\n");
-//         goto err;
-//     }
-
-//     value[0] = 99;
-//     value[1] = 100;
-//     rc = ble_gattc_write_flat(conn_handle, chr->chr.val_handle,
-//                               value, sizeof value, blecent_on_write, NULL);
-//     if (rc != 0) {
-//         MODLOG_DFLT(ERROR, "Error: Failed to write characteristic; rc=%d\n",
-//                     rc);
-//         goto err;
-//     }
-
-//     return 0;
-// err:
-//     /* Terminate the connection. */
-//     return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-// }
-
 static void
-blecent_read_write_subscribe(const struct peer *peer)
+blecent_subscribe(const struct peer *peer)
 {
-    /* Connection made and service/characteristic/descriptor discovery completed.
-     * Perform reads/writes/subsribes that happen initially.
-     */
-
     /* Subscribe to CMD_INPUT.
      * A central enables notifications by writing two bytes (1, 0) to the
      * characteristic's client-characteristic-configuration-descriptor (CCCD).
@@ -697,7 +526,7 @@ blecent_read_write_subscribe(const struct peer *peer)
 
     if (dsc == NULL) {
         MODLOG_DFLT(ERROR, "Error: Peer lacks a CCCD for the CMD_INPUT characteristic\n");
-        peer_delete(peer->conn_handle); // TODO: delete
+        peer_delete(peer->conn_handle);
         goto err; 
     }
 
@@ -741,40 +570,13 @@ blecent_on_disc_complete(const struct peer *peer, int status, void *arg)
     ESP_LOGI(tag, "Service discovery complete; status=%d "
              "conn_handle=%d\n", status, peer->conn_handle);
 
-    /* Now perform three GATT procedures against the peer: read,
-     * write, and subscribe to notifications depending upon user input.
+    /* Now perform GATT procedures against the peer before entering
+     * testing loop
      */
-    blecent_read_write_subscribe(peer);
+    blecent_subscribe(peer);
 
-    // /* Now perform GATT procedures against the peer: read,
-    // * write, and subscribe to notifications depending upon user input.
-    // */
     xTaskCreate(conn_test_loop, "conn_test", 4096, (void *) peer, 10, NULL);
 }
-
-/* Predefined callback function arguments */
-// static int
-// disc_svc_by_uuid_cb(uint16_t conn_handle, 
-//                     const struct ble_gatt_error *error, 
-//                     const struct ble_gatt_svc *service, 
-//                     void *arg)
-// {
-//     ESP_LOGI(tag, "reached disc_svc_by_uuid_cb");
-
-//     struct ble_gatt_svc *svc_struct = (struct ble_gatt_svc *)arg;
-//     int rc = error->status;
-
-//     ESP_LOGI(tag, "  error->status=%d", rc);
-    
-//     if (rc == 0) // if no error
-//     {
-//         ESP_LOGI(tag, "  populating fields");
-//         svc_struct->uuid = service->uuid;
-//         svc_struct->start_handle = service->start_handle;
-//         svc_struct->end_handle = service->end_handle;
-//     }
-//     return rc;
-// }
 
 /**
  * Initiates the GAP general discovery procedure.
@@ -957,35 +759,35 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
             /* XXX Set packet length in controller for better throughput */
             ESP_LOGI(tag, "Connection established ");
 
-            /* Start: ??? */
+            /* Set packet length */
             rc = ble_hs_hci_util_set_data_len(event->connect.conn_handle,
                                               LL_PACKET_LENGTH, LL_PACKET_TIME);
             if (rc != 0) {
                 ESP_LOGE(tag, "Set packet length failed; rc = %d", rc);
             }
-
+            
+            /* Set preferred MTU */
             rc = ble_att_set_preferred_mtu(mtu_def);
             if (rc != 0) {
                 ESP_LOGE(tag, "Failed to set preferred MTU; rc = %d", rc);
             }
 
+            /* Negotiate MTU */
             rc = ble_gattc_exchange_mtu(event->connect.conn_handle, NULL, NULL);
             if (rc != 0) {
                 ESP_LOGE(tag, "Failed to negotiate MTU; rc = %d", rc);
             }
-            /* End: ??? */
 
             rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
             assert(rc == 0);
             print_conn_desc(&desc);
 
-            /* ? */
             rc = ble_gap_update_params(event->connect.conn_handle, &conn_params);
             if (rc != 0) {
                 ESP_LOGE(tag, "Failed to update params; rc = %d", rc);
             }
 
-            /* Remember peer. Peers include those devices not of interest */
+            /* Remember peer */
             rc = peer_add(event->connect.conn_handle);
             if (rc != 0) {
                 ESP_LOGE(tag, "Failed to add peer; rc = %d", rc);
@@ -1036,7 +838,6 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_NOTIFY_RX:
         /* Peer sent us a notification or indication. */
-        mbuf_len_total = mbuf_len_total + OS_MBUF_PKTLEN(event->notify_rx.om); // For read throughput
         ESP_LOGI(tag, "received %s; conn_handle = %d attr_handle = %d "
                  "attr_len = %d ; Total length = %d",
                  event->notify_rx.indication ?
@@ -1074,48 +875,11 @@ static void
 blecent_on_sync(void)
 {
     int rc;
-    // bool yes = false;
 
     /* Make sure we have proper identity address set (public preferred) */
     rc = ble_hs_util_ensure_addr(0);
     assert(rc == 0);
 
-    // ESP_LOGI(tag, "Do you want to configure connection params ? ");
-    // ESP_LOGI(tag, "If yes then enter in this format: `Insert Yes` ");
-    // if (scli_receive_yesno(&yes)) {
-    //     if (yes) {
-    //         ESP_LOGI(tag, " Enter preferred MTU, format:: `MTU 512` ");
-    //         if (scli_receive_key(&mtu_def)) {
-    //             ESP_LOGI(tag, "MTU provided by user= %d", mtu_def);
-    //         } else {
-    //             ESP_LOGD(tag, "No input for setting MTU; use default mtu = %d", mtu_def);
-    //         }
-
-    //         scli_reset_queue();
-    //         ESP_LOGI(tag, "For Conn param: Enter `min_itvl` `max_itvl`"
-    //                  "`latency` `timeout` `min_ce` `max_ce` in same order");
-    //         ESP_LOGI(tag, "Enter conn_update in this format:: `conn 6 120 0 500 0 0`");
-
-    //         if (scli_receive_key(conn_params_def)) {
-    //             /** Minimum value for connection interval in 1.25ms units */
-    //             conn_params.itvl_min = conn_params_def[0];
-    //             /** Maximum value for connection interval in 1.25ms units */
-    //             conn_params.itvl_max = conn_params_def[1];
-    //             /** Connection latency */
-    //             conn_params.latency = conn_params_def[2];
-    //             /** Supervision timeout in 10ms units */
-    //             conn_params.supervision_timeout = conn_params_def[3];
-    //             /** Minimum length of connection event in 0.625ms units */
-    //             conn_params.min_ce_len = conn_params_def[4];
-    //             /** Maximum length of connection event in 0.625ms units */
-    //             conn_params.max_ce_len = conn_params_def[5];
-
-    //         } else {
-    //             ESP_LOGD(tag, "no input by user for conn param; use default ");
-    //         }
-    //         scli_reset_queue();
-    //     }
-    // }
     /* Begin scanning for a peripheral to connect to. */
     blecent_scan();
 }
@@ -1166,54 +930,7 @@ app_main(void)
     /* XXX Need to have template for store */
     ble_store_config_init();
 
-    /* Before starting with blecent host task, let us get CLI task up and
-     * running */
-    // esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    // esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
-    // esp_console_repl_t *repl = NULL;
-    // repl_config.prompt = "Throughput : ";
-    // ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
-    // register_system();
-    // esp_console_register_help_command();
-    // /* Register commands */
-    // ble_register_cli();
-
-    /* As BLE CLI has been registered, let us start nimble host task */
+    /* Start nimble host task */
     nimble_port_freertos_init(blecent_host_task);
 
-    // printf("\n ===============================================================================================\n");
-    // printf(" |                         Steps to test nimble throughput                                       |\n");
-    // printf(" |                                                                                               |\n");
-    // printf(" |  1. Print 'help' to gain overview of commands                                                 |\n");
-    // printf(" |                                                                                               |\n");
-    // printf("\n ===============================================================================================\n");
-
-    // const char *prompt = LOG_COLOR_I "Throughput demo >> " LOG_RESET_COLOR;
-
-    // while (true) {
-    //     /* Get a line using linenoise.
-    //      * The line is returned when ENTER is pressed.
-    //      */
-    //     char *line = linenoise(prompt);
-    //     if (line == NULL) { /* Ignore empty lines */
-    //         continue;
-    //     }
-    //     /* Add the command to the history */
-    //     linenoiseHistoryAdd(line);
-
-    //     /* Try to run the command */
-    //     int ret;
-    //     esp_err_t err = esp_console_run(line, &ret);
-    //     if (err == ESP_ERR_NOT_FOUND) {
-    //         printf("Unrecognized command\n");
-    //     } else if (err == ESP_ERR_INVALID_ARG) {
-    //         // command was empty
-    //     } else if (err == ESP_OK && ret != ESP_OK) {
-    //         printf("Command returned non-zero error code: 0x%x (%s)\n", ret, esp_err_to_name(ret));
-    //     } else if (err != ESP_OK) {
-    //         printf("Internal error: %s\n", esp_err_to_name(err));
-    //     }
-    //     /* linenoise allocates line buffer on the heap, so need to free it */
-    //     linenoiseFree(line);
-    // }
 }
